@@ -47,20 +47,13 @@ urltemp like : "https://www.baidu.com/?uid={id}"
 	})
 */
 func (sess *Session) GetsWith(urltemp string, mapFuncs Gfunc, handleRes func(loger Loger, res *SmartResponse, err error), proxy ...interface{}) {
-	pool := NewAwaitPool(200)
+	pool := NewAwaitPool(100)
 	pool.RetryTime = sess.MultiGetRetryTime
-	if proxy != nil {
-		switch proxy[0].(type) {
-		case string:
-			if strings.HasPrefix(proxy[0].(string), "http") {
-				InitProxyPool(proxy[0].(string))
-			}
-		}
-	}
+	startTime := time.Now()
 
 	pool.Handle = func(url string, retryTime int) interface{} {
 		if retryTime > 0 && LogLevl > 2 {
-			fmt.Print(time.Now().UTC(), len(pool.doing), " retry:", url, " time:", retryTime, "     \r")
+			fmt.Print(fmt.Sprintf("Start At %d-%d-%d %d:%d:%d Used:", startTime.Year(), startTime.Month(), startTime.Day(), startTime.Hour(), startTime.Minute(), startTime.Second()), time.Now().Sub(startTime), len(pool.doing), " retry:", url, " time:", retryTime, "     \r")
 		}
 		res, err := sess.Get(url, proxy...)
 		if err != nil {
@@ -108,14 +101,6 @@ func (sess *Session) MultiGet(urls []string, handleRes func(loger Loger, res *Sm
 	}
 	pool := NewAwaitPool(c)
 	pool.RetryTime = sess.MultiGetRetryTime
-	if proxy != nil {
-		switch proxy[0].(type) {
-		case string:
-			if strings.HasPrefix(proxy[0].(string), "http") {
-				InitProxyPool(proxy[0].(string))
-			}
-		}
-	}
 	pool.Handle = func(url string, tryTime int) interface{} {
 		if tryTime > 0 {
 			Info("retry:", url, " time:", tryTime)
@@ -251,10 +236,6 @@ func (sess *Session) CheckAlive(urls []string, showBar bool, after func(res *Sma
 		}
 	}, showBar, proxy...)
 	return
-}
-
-func InitProxyPool(url string) {
-	DefaultProxyPool.Add(url)
 }
 
 // 0 is flow / 1 is random

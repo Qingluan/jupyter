@@ -37,7 +37,7 @@ func NewAwaitPool(thread int) (pool *RunnerPool) {
 		errRecords: make(map[string]int),
 		task:       make(chan string),
 		result:     make(chan Result),
-		doing:      make(chan int, thread*2),
+		doing:      make(chan int, thread),
 	}
 	return pool
 }

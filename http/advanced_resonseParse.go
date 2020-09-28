@@ -58,10 +58,10 @@ func (res *SmartResponse) CssSelect(css string, each func(i int, s *Selection)) 
 }
 
 /* CssExtract
-	can use text | href | id | class
+	 raw | href | id | class
 exmaple : CssExtract(Dict{
 	"name": "div.names#one " ,   // will return *goquery.Selection
-	"nameText": "div.names#one | text " , // will return node's string
+	"nameText": "div.names#one | raw " , // will return node's string
 	"imgLink" : "img#head | href ",
 })
 */
@@ -77,10 +77,10 @@ func (res *SmartResponse) CssExtract(cssSelctors Dict) (out G) {
 				oper = strings.TrimSpace(ss[1])
 			}
 			if oper == "" {
-				out[name] = soup.Find(css)
+				out[name] = strings.TrimSpace(soup.Find(css).Text())
 			} else {
-				if oper == "text" {
-					out[name] = strings.TrimSpace(soup.Find(css).Text())
+				if oper == "raw" {
+					out[name] = soup.Find(css)
 				} else {
 					out[name], _ = soup.Find(css).Attr(oper)
 				}
