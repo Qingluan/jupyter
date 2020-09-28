@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 var (
@@ -23,10 +25,14 @@ func (res *SmartResponse) Links(includeouter ...bool) (s []string) {
 	host := u.Host
 	base := u.Scheme + "://" + host
 	e := make(map[string]bool)
-	for _, a := range res.Soup().FindAll("a") {
-		link := a.Attrs()["href"]
+	res.Soup().Find("a").Each(func(i int, d *goquery.Selection) {
+
+		link, ok := d.Attr("href")
+		if !ok {
+			return
+		}
 		if link == "/" || link == "" {
-			continue
+			return
 		}
 		if strings.HasPrefix(link, "/") {
 			e[UrlJoin(base, link)] = true
@@ -35,9 +41,20 @@ func (res *SmartResponse) Links(includeouter ...bool) (s []string) {
 				e[link] = true
 			}
 		}
-	}
+
+	})
 
 	return DictBool(e).Keys()
+}
+
+type Selection struct {
+	goquery.Selection
+}
+
+func (res *SmartResponse) CssSelect(css string, each func(i int, s *Selection)) {
+	res.Soup().Find(css).Each(func(i int, a *goquery.Selection) {
+		each(i, &Selection{*a})
+	})
 }
 
 func (res *SmartResponse) FileLinks(includeouter ...bool) (s []string) {

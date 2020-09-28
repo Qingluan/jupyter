@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anaskhan96/soup"
+	"github.com/PuerkitoBio/goquery"
 
 	// "github.com/roberson-io/mmh3"
 	"github.com/reusee/mmh3"
@@ -67,6 +67,8 @@ type SmartResponse struct {
 	requestURL string
 	cache      []byte
 }
+
+// type Document goquery.Document
 
 func NewSession() (sess *Session) {
 	sess = &Session{
@@ -407,14 +409,19 @@ func (smartres *SmartResponse) HeaderString() (d string) {
 }
 
 // Get Soup
-func (smartres *SmartResponse) Soup() soup.Root {
-	return soup.HTMLParse(string(smartres.Html()))
+func (smartres *SmartResponse) Soup() (m *goquery.Document) {
+	d, e := goquery.NewDocumentFromReader(bytes.NewBuffer(smartres.Html()))
+	if e != nil {
+		return nil
+	} else {
+		return d
+	}
 }
 
 // Get title
 func (smartres *SmartResponse) Title() string {
-	if soup := smartres.Soup().Find("title"); soup.Pointer != nil {
-		return soup.Text()
+	if soup := smartres.Soup(); soup != nil {
+		return soup.Find("title").Text()
 	}
 	return ""
 }

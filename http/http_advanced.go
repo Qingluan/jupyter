@@ -18,6 +18,22 @@ var (
 	// RawReqStringSmartRe = regexp.MustCompile(`\n`)
 )
 
+// func (d *Document) Find(cssselct string) *Selection {
+// 	rd := (*goquery.Document)(d)
+// 	// rd.Each(cssselct, func(i int, d *goquery.Selection) {
+// 	// a(i, (*Selection)(d))
+// 	// })
+// 	return &Selection{*rd.Find(cssselct)}
+// 	// return *ff}
+// }
+
+// func (s *Selection) Each(deal func(i int, d *Selection)) *Selection {
+// 	// rs := (*goquery.Selection)(s)
+// 	return rs.Each(func(i int, a *goquery.Selection) {
+// 		deal(i, (*Selection)(a))
+// 	})
+// }
+
 func (sess *Session) MultiGet(urls []string, handleRes func(loger Loger, res *SmartResponse, err error), showBar bool, proxy ...interface{}) {
 	c := len(urls)
 	if c > 100 {
