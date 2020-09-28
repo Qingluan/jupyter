@@ -1,4 +1,4 @@
-module gitee.com/dark.H/Jupyter
+module github.com/Qingluan/jupyter
 
 go 1.14
 
