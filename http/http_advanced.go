@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -15,6 +16,7 @@ var (
 	RandomMode = 1
 	FlowMode   = 0
 	HostParse  = regexp.MustCompile(`Host: .+`)
+	LogLevl    = 0
 	// RawReqStringSmartRe = regexp.MustCompile(`\n`)
 )
 
@@ -56,7 +58,10 @@ func (sess *Session) GetsWith(urltemp string, mapFuncs Gfunc, handleRes func(log
 		}
 	}
 
-	pool.Handle = func(url string) interface{} {
+	pool.Handle = func(url string, retryTime int) interface{} {
+		if retryTime > 0 && LogLevl > 2 {
+			fmt.Print(time.Now().UTC(), len(pool.doing), " retry:", url, " time:", retryTime, "     \r")
+		}
 		res, err := sess.Get(url, proxy...)
 		if err != nil {
 			return err
@@ -90,7 +95,7 @@ func (sess *Session) GetsWith(urltemp string, mapFuncs Gfunc, handleRes func(log
 			}
 		}
 		u := rawtemp.FormatMap(d).String()
-		Info(u)
+		// Info(u)
 		return u, true
 	})
 
@@ -111,7 +116,10 @@ func (sess *Session) MultiGet(urls []string, handleRes func(loger Loger, res *Sm
 			}
 		}
 	}
-	pool.Handle = func(url string) interface{} {
+	pool.Handle = func(url string, tryTime int) interface{} {
+		if tryTime > 0 {
+			Info("retry:", url, " time:", tryTime)
+		}
 		res, err := sess.Get(url, proxy...)
 		if err != nil {
 			return err

@@ -1,3 +1,5 @@
 *.exe
 example/test1/test1
+example/dzusers
 go.sum
+

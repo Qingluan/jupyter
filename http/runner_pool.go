@@ -2,6 +2,7 @@ package http
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 )
 
@@ -21,11 +22,12 @@ type RunnerPool struct {
 	task       chan string
 	result     chan Result
 	doing      chan int
-	Handle     func(arg string) interface{}
+	Handle     func(arg string, tryTime int) interface{}
 	After      func(res Result, loger Loger)
 	ErrDo      func(error, int, Result, Loger)
 	// Loger  Loger
 	RetryTime int
+	LogLevl   int
 	Bar       *ConsoleBar
 }
 
@@ -35,7 +37,7 @@ func NewAwaitPool(thread int) (pool *RunnerPool) {
 		errRecords: make(map[string]int),
 		task:       make(chan string),
 		result:     make(chan Result),
-		doing:      make(chan int, thread),
+		doing:      make(chan int, thread*2),
 	}
 	return pool
 }
@@ -93,14 +95,14 @@ func (pool *RunnerPool) resultLoop() {
 	}
 }
 
-func _run(handle func(arg string) interface{}, a string, doing chan int, res chan Result) {
+func _run(handle func(arg string, tryTime int) interface{}, a string, at int, doing chan int, res chan Result) {
 	defer func() {
 		<-doing
 	}()
 	doing <- 1
 	res <- Result{
 		Url: a,
-		Res: handle(a),
+		Res: handle(a, at),
 	}
 }
 func (pool *RunnerPool) tasktLoop() {
@@ -112,7 +114,8 @@ func (pool *RunnerPool) tasktLoop() {
 			time.Sleep(1 * time.Second)
 		}
 		arg := <-pool.task
-		go _run(pool.Handle, arg, pool.doing, pool.result)
+		argRtryTime, _ := pool.errRecords[arg]
+		go _run(pool.Handle, arg, argRtryTime, pool.doing, pool.result)
 	}
 }
 
@@ -133,22 +136,29 @@ func (pool *RunnerPool) LoopByFunc(generate func() (string, bool)) {
 			}
 		}
 	}()
-
+	time.Sleep(2 * time.Second)
 	for {
 		if len(pool.ready) > 0 {
 			var arg string
 			for len(pool.ready) > 0 {
+				if len(pool.ready) > 2 {
+					// a := []int{1, 2, 3, 4, 5, 6, 7, 8}
+					rand.Seed(time.Now().UnixNano())
+					rand.Shuffle(len(pool.ready), func(i, j int) { pool.ready[i], pool.ready[j] = pool.ready[j], pool.ready[i] })
+				}
 				arg, pool.ready = pool.ready[0], pool.ready[1:]
+				// Info("tetry:", arg)
+
+				time.Sleep(100 * time.Millisecond)
 				pool.task <- arg
 			}
-
 			time.Sleep(2 * time.Second)
 		}
 		if len(pool.doing) == 0 {
 			pool.task <- STOP
 			break
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	return
 

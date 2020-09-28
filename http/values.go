@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 )
@@ -52,7 +53,17 @@ func (v Value) Add(one int) Value {
 }
 
 func (v Value) AsInt() (int, error) {
-	return strconv.Atoi(v.v.(string))
+	switch v.v.(type) {
+	case int:
+		return v.v.(int), nil
+	case string:
+		return strconv.Atoi(v.v.(string))
+	case float32:
+		return int(v.v.(float32)), nil
+	case float64:
+		return int(v.v.(float64)), nil
+	}
+	return 0, errors.New("can not be cast as int")
 }
 
 func (v Value) String() string {

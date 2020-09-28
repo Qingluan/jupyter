@@ -101,6 +101,7 @@ func (session *Session) UrlJoin(f ...string) string {
 }
 
 func (session *Session) SetTimeout(t int) {
+	session.Timeout = t
 	session.Transprot.ResponseHeaderTimeout = time.Duration(t) * time.Second
 }
 

@@ -80,7 +80,7 @@ func (res *SmartResponse) CssExtract(cssSelctors Dict) (out G) {
 				out[name] = soup.Find(css)
 			} else {
 				if oper == "text" {
-					out[name] = soup.Find(css).Text()
+					out[name] = strings.TrimSpace(soup.Find(css).Text())
 				} else {
 					out[name], _ = soup.Find(css).Attr(oper)
 				}
