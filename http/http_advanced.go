@@ -34,6 +34,68 @@ var (
 // 	})
 // }
 
+/* HttpByCustom
+example
+urltemp like : "https://www.baidu.com/?uid={id}"
+	GetSwith("https://www.baidu.com/?uid={id}", func(p Pyaloader) (string, bool){
+		defaultvalue := 0
+		p.SetValue("id", func(v Value)Value{
+			return v.Add(2)
+		}, defaultvalue)
+	})
+*/
+func (sess *Session) GetsWith(urltemp string, mapFuncs Gfunc, handleRes func(loger Loger, res *SmartResponse, err error), proxy ...interface{}) {
+	pool := NewAwaitPool(200)
+	pool.RetryTime = sess.MultiGetRetryTime
+	if proxy != nil {
+		switch proxy[0].(type) {
+		case string:
+			if strings.HasPrefix(proxy[0].(string), "http") {
+				InitProxyPool(proxy[0].(string))
+			}
+		}
+	}
+
+	pool.Handle = func(url string) interface{} {
+		res, err := sess.Get(url, proxy...)
+		if err != nil {
+			return err
+		}
+		return res
+	}
+
+	pool.After = func(res Result, loger Loger) {
+		switch res.Res.(type) {
+		case error:
+			handleRes(loger, nil, fmt.Errorf("%s : %s  (proxy : %v)", res.Url, res.Res.(error).Error(), proxy))
+		case *SmartResponse:
+			defer res.Res.(*SmartResponse).Body.Close()
+			handleRes(loger, res.Res.(*SmartResponse), nil)
+		}
+	}
+	// pool.Loop(urls, showBar)
+	rawtemp := Payloader(urltemp)
+	values := map[string]Value{}
+
+	pool.LoopByFunc(func() (string, bool) {
+		d := map[string]interface{}{}
+		for name, f := range mapFuncs {
+			value := f(values[name])
+			if value.v != nil {
+				values[name] = value
+				d[name] = value.String()
+				continue
+			} else {
+				return "", false
+			}
+		}
+		u := rawtemp.FormatMap(d).String()
+		Info(u)
+		return u, true
+	})
+
+}
+
 func (sess *Session) MultiGet(urls []string, handleRes func(loger Loger, res *SmartResponse, err error), showBar bool, proxy ...interface{}) {
 	c := len(urls)
 	if c > 100 {

@@ -116,6 +116,44 @@ func (pool *RunnerPool) tasktLoop() {
 	}
 }
 
+func (pool *RunnerPool) LoopByFunc(generate func() (string, bool)) {
+	go pool.resultLoop()
+	go pool.tasktLoop()
+	go pool.Tick(3)
+	// if showBar {
+	// 	pool.Bar, _ = NewConsoleBar(int64(len(args)))
+	// }
+
+	go func() {
+		for {
+			if u, ok := generate(); ok {
+				pool.task <- u
+			} else {
+				break
+			}
+		}
+	}()
+
+	for {
+		if len(pool.ready) > 0 {
+			var arg string
+			for len(pool.ready) > 0 {
+				arg, pool.ready = pool.ready[0], pool.ready[1:]
+				pool.task <- arg
+			}
+
+			time.Sleep(2 * time.Second)
+		}
+		if len(pool.doing) == 0 {
+			pool.task <- STOP
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return
+
+}
+
 func (pool *RunnerPool) Loop(args []string, showBar bool) {
 	go pool.resultLoop()
 	go pool.tasktLoop()

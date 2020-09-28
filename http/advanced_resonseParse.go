@@ -57,6 +57,40 @@ func (res *SmartResponse) CssSelect(css string, each func(i int, s *Selection)) 
 	})
 }
 
+/* CssExtract
+	can use text | href | id | class
+exmaple : CssExtract(Dict{
+	"name": "div.names#one " ,   // will return *goquery.Selection
+	"nameText": "div.names#one | text " , // will return node's string
+	"imgLink" : "img#head | href ",
+})
+*/
+func (res *SmartResponse) CssExtract(cssSelctors Dict) (out G) {
+	if soup := res.Soup(); soup != nil {
+		out = make(G)
+		for name, css := range cssSelctors {
+			// "" raw
+			oper := ""
+			if strings.Contains(css, "|") {
+				ss := strings.SplitN(css, "|", 2)
+				css = strings.TrimSpace(ss[0])
+				oper = strings.TrimSpace(ss[1])
+			}
+			if oper == "" {
+				out[name] = soup.Find(css)
+			} else {
+				if oper == "text" {
+					out[name] = soup.Find(css).Text()
+				} else {
+					out[name], _ = soup.Find(css).Attr(oper)
+				}
+
+			}
+		}
+	}
+	return
+}
+
 func (res *SmartResponse) FileLinks(includeouter ...bool) (s []string) {
 	e := map[string]bool{
 		".txt":  true,

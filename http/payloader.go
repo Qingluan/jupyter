@@ -59,3 +59,11 @@ func (pay Payloader) FormatMap(args map[string]interface{}) Payloader {
 	}
 	return Payloader(raw)
 }
+
+func (pay Payloader) Render(name string, v Value) string {
+	return pay.FormatMap(G{name: v.String()}).String()
+}
+
+// func (pay Payloader) RenderCustom(gf map[string]) string {
+// 	return pay.FormatMap(G{name: v.String()}).String()
+// }
