@@ -14,8 +14,11 @@ import (
 type EnumeConfig struct {
 	Domain   string
 	Proxy    string
+	Proxy2   string
+	Proxy3   string
 	Output   string
 	Names    []string
+	IdFile   string
 	StartId  int
 	EndId    int
 	Template map[string]string
@@ -26,6 +29,8 @@ var (
 ## this is demo config file
 domain: https://www.dz3.5.com/?id={id}
 proxy: socks5://127.0.0.1:1091
+
+# id_file:  someId.txt
 startId: 0
 endId : 100
 output: test.csv
@@ -74,6 +79,15 @@ func ReadConf(f string) (config *EnumeConfig) {
 			case "proxy":
 				log.Println(fmt.Sprintf("[%s]: %s", head, body))
 				config.Proxy = body
+			case "proxy2":
+				log.Println(fmt.Sprintf("[%s]: %s", head, body))
+				config.Proxy2 = body
+			case "proxy3":
+				log.Println(fmt.Sprintf("[%s]: %s", head, body))
+				config.Proxy3 = body
+			case "id_file":
+				log.Println(fmt.Sprintf("[%s]: %s", head, body))
+				config.IdFile = body
 			case "output":
 				log.Println(fmt.Sprintf("[%s]: %s", head, body))
 				config.Output = body

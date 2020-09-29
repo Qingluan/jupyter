@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/csv"
 	"flag"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -16,6 +17,7 @@ var (
 	target       string
 	startId      int
 	endId        int
+	thread       int
 	config       string
 	output       string
 	discuzzTempl bool
@@ -23,6 +25,7 @@ var (
 
 func main() {
 	flag.StringVar(&config, "c", "", "config file")
+	flag.IntVar(&thread, "t", 200, "async io num")
 	flag.BoolVar(&discuzzTempl, "H", false, "true  to show dz3.4 enumer user teplate  ")
 	flag.Parse()
 	extractD := make(http.Dict)
@@ -52,7 +55,12 @@ func main() {
 		// pool := merkur.NewProxyPool(proxy)
 		http.SetProxyGenerater(merkur.NewProxyDialer)
 		http.DefaultProxyPool = merkur.DefaultProxyPool
-
+		if config.Proxy2 != "" {
+			http.DefaultProxyPool.Add(config.Proxy2)
+		}
+		if config.Proxy3 != "" {
+			http.DefaultProxyPool.Add(config.Proxy3)
+		}
 		// pool.Mode = merkur.Random
 		http.LogLevl = 3
 		sess := http.NewSession()
@@ -73,17 +81,38 @@ func main() {
 		}
 		// sess.Get("https://")
 		sess.RandomeUA = true
-		sess.GetsWith(target, http.Gfunc{
-			"id": func(last http.Value) http.Value {
-				if last.Empty() {
-					return http.NewValue(startId)
-				}
-				if i, _ := last.AsInt(); i > endId { //120303 {
-					return http.Value{}
-				}
-				return last.Increase()
-			},
-		}, func(loger http.Loger, res *http.SmartResponse, err error) {
+		var maps http.Gfunc
+		if config.IdFile != "" {
+			buf, err := ioutil.ReadFile(config.IdFile)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ids := []string{}
+			for _, i := range strings.Split(string(buf), "\n") {
+				ids = append(ids, strings.TrimSpace(i))
+			}
+			use := 0
+			maps = http.Gfunc{
+				"id": func(last http.Value) http.Value {
+					v := http.NewValue(ids[use])
+					use++
+					return v
+				},
+			}
+		} else {
+			maps = http.Gfunc{
+				"id": func(last http.Value) http.Value {
+					if last.Empty() {
+						return http.NewValue(startId)
+					}
+					if i, _ := last.AsInt(); i > endId { //120303 {
+						return http.Value{}
+					}
+					return last.Increase()
+				},
+			}
+		}
+		sess.GetsWith(target, maps, func(loger http.Loger, res *http.SmartResponse, err error) {
 			if err == nil {
 				// http.Success(suss_num, " | ", res.Text())
 
@@ -119,7 +148,7 @@ func main() {
 			} else {
 				// http.Failed(res.RequestURL(), err)
 			}
-		}, proxy)
+		}, thread, proxy)
 		// x.
 	} else {
 		sess := http.NewSession()
@@ -140,9 +169,9 @@ func main() {
 		sess.GetsWith(target, http.Gfunc{
 			"id": func(last http.Value) http.Value {
 				if last.Empty() {
-					return http.NewValue(1)
+					return http.NewValue(startId)
 				}
-				if i, _ := last.AsInt(); i > 120303 {
+				if i, _ := last.AsInt(); i > endId {
 					return http.Value{}
 				}
 				return last.Increase()
@@ -175,6 +204,6 @@ func main() {
 			} else {
 				// http.Failed(res.RequestURL(), err)
 			}
-		})
+		}, thread)
 	}
 }

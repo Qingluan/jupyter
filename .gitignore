@@ -4,5 +4,8 @@ example/dzusers
 Jupyter/*.conf
 Jupyter/*.csv
 Jupyter/Jupyter*
+*.txt
+*.conf
+*.json
 go.sum
 

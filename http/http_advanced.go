@@ -46,8 +46,8 @@ urltemp like : "https://www.baidu.com/?uid={id}"
 		}, defaultvalue)
 	})
 */
-func (sess *Session) GetsWith(urltemp string, mapFuncs Gfunc, handleRes func(loger Loger, res *SmartResponse, err error), proxy ...interface{}) {
-	pool := NewAwaitPool(100)
+func (sess *Session) GetsWith(urltemp string, mapFuncs Gfunc, handleRes func(loger Loger, res *SmartResponse, err error), thread int, proxy ...interface{}) {
+	pool := NewAwaitPool(thread)
 	pool.RetryTime = sess.MultiGetRetryTime
 	startTime := time.Now()
 
