@@ -1,13 +1,23 @@
 package http
 
+import (
+	"bufio"
+	"fmt"
+	"io"
+
+	"golang.org/x/net/html/charset"
+
+	"golang.org/x/text/encoding/htmlindex"
+)
+
 func detectContentCharset(body io.Reader) string {
 	r := bufio.NewReader(body)
-	if data, err := r.Peek(1024); err == nil {
+	if data, err := r.Peek(2024); err == nil {
 		if _, name, ok := charset.DetermineEncoding(data, ""); ok {
 			return name
 		}
 	}
-	return "utf-8"
+	return "gbk"
 }
 
 // DecodeHTMLBody returns an decoding reader of the html Body for the specified `charset`
@@ -15,6 +25,7 @@ func detectContentCharset(body io.Reader) string {
 func DecodeHTMLBody(body io.Reader, charset string) (io.Reader, error) {
 	if charset == "" {
 		charset = detectContentCharset(body)
+		fmt.Println("guess:", charset)
 	}
 	e, err := htmlindex.Get(charset)
 	if err != nil {
