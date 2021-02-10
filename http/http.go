@@ -411,7 +411,12 @@ func (smartres *SmartResponse) HeaderString() (d string) {
 
 // Get Soup
 func (smartres *SmartResponse) Soup() (m *goquery.Document) {
-	d, e := goquery.NewDocumentFromReader(bytes.NewBuffer(smartres.Html()))
+	pre := bytes.NewBuffer(smartres.Html())
+	ebuffer, err := DecodeHTMLBody(pre, "")
+	if err != nil {
+		log.Fatal("can not decode html")
+	}
+	d, e := goquery.NewDocumentFromReader(ebuffer)
 	if e != nil {
 		return nil
 	} else {
