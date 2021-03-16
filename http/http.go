@@ -9,9 +9,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"mime/multipart"
 	httplib "net/http"
 	"net/url"
 	"os"
@@ -20,6 +22,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/cheggaaa/pb"
 
 	// "github.com/roberson-io/mmh3"
 	"github.com/reusee/mmh3"
@@ -259,6 +262,76 @@ func (session *Session) Json(url string, data map[string]string, proxy ...interf
 	buf, _ := json.MarshalIndent(data, "", "\t")
 	req, err := httplib.NewRequest("POST", url, bytes.NewBuffer(buf))
 	req.Header.Set("Content-type", "application/json")
+
+	client := session.getClient(proxy...)
+	if client == nil {
+		return nil, fmt.Errorf("Proxy Set Error: %v", proxy)
+	}
+	for k, v := range session.Header {
+		req.Header.Set(k, v)
+	}
+	if session.RandomeUA {
+		ix := rand.Int() % len(UA)
+		ua := UA[ix]
+		req.Header.Set("User-agent", ua)
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	resp = &SmartResponse{
+		*res,
+		res.StatusCode,
+		url,
+		nil,
+	}
+	return
+}
+
+func (session *Session) Upload(url string, filePath string, fileKey string, data map[string]string, showBar bool, proxy ...interface{}) (resp *SmartResponse, err error) {
+
+	fp, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	var fi os.FileInfo
+	if fi, err = fp.Stat(); err != nil {
+		log.Fatal(err)
+	}
+	defer fp.Close()
+	r, w := io.Pipe()
+	mpw := multipart.NewWriter(w)
+	var bar *pb.ProgressBar
+	if showBar {
+		bar = pb.New64(fi.Size()).SetUnits(pb.U_BYTES).SetRefreshRate(time.Millisecond * 10)
+		bar.Start()
+	}
+	go func() {
+		var part io.Writer
+		defer w.Close()
+		defer fp.Close()
+
+		for k, v := range data {
+			w1, _ := mpw.CreateFormField(k)
+			w1.Write([]byte(v))
+		}
+
+		if part, err = mpw.CreateFormFile(fileKey, fi.Name()); err != nil {
+			log.Fatal(err)
+		}
+		if showBar {
+			part = io.MultiWriter(part, bar)
+		}
+		if _, err = io.Copy(part, fp); err != nil {
+			log.Fatal(err)
+		}
+		if err = mpw.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	req, err := httplib.NewRequest("POST", url, r)
+	req.Header.Set("Content-type", mpw.FormDataContentType())
 
 	client := session.getClient(proxy...)
 	if client == nil {
