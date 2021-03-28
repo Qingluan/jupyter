@@ -77,12 +77,29 @@ func (res *SmartResponse) CssExtract(cssSelctors Dict) (out G) {
 				oper = strings.TrimSpace(ss[1])
 			}
 			if oper == "" {
-				out[name] = strings.TrimSpace(soup.Find(css).Text())
+				vars := []string{}
+				soup.Find(css).Each(func(i int, s *goquery.Selection) {
+					vars = append(vars, strings.TrimSpace(s.Text()))
+				})
+				out[name] = vars
 			} else {
 				if oper == "raw" {
-					out[name] = soup.Find(css)
+					vars := []string{}
+
+					soup.Find(css).Each(func(i int, s *goquery.Selection) {
+						w, _ := s.Html()
+						vars = append(vars, strings.TrimSpace(w))
+					})
+					out[name] = vars
 				} else {
-					out[name], _ = soup.Find(css).Attr(oper)
+
+					vars := []string{}
+
+					soup.Find(css).Each(func(i int, s *goquery.Selection) {
+						w := s.AttrOr(oper, "")
+						vars = append(vars, strings.TrimSpace(w))
+					})
+					out[name] = vars
 				}
 
 			}
