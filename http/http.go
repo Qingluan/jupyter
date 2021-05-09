@@ -296,7 +296,8 @@ func (session *Session) Upload(url string, filePath string, fileKey string, data
 	}
 	var fi os.FileInfo
 	if fi, err = fp.Stat(); err != nil {
-		log.Fatal(err)
+		// log.Fatal(err)
+		return
 	}
 	defer fp.Close()
 	r, w := io.Pipe()
@@ -317,16 +318,19 @@ func (session *Session) Upload(url string, filePath string, fileKey string, data
 		}
 
 		if part, err = mpw.CreateFormFile(fileKey, fi.Name()); err != nil {
-			log.Fatal(err)
+			log.Println("Upload Create:",err)
+			return 
 		}
 		if showBar {
 			part = io.MultiWriter(part, bar)
 		}
 		if _, err = io.Copy(part, fp); err != nil {
-			log.Fatal(err)
+			log.Println("Upload io COPY:",err)
+			return
 		}
 		if err = mpw.Close(); err != nil {
-			log.Fatal(err)
+			log.Println("Upload Close:",err)
+			return
 		}
 	}()
 
