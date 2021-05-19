@@ -3,9 +3,8 @@ module github.com/Qingluan/jupyter
 go 1.14
 
 require (
-	gitee.com/dark.H/Jupyter v0.0.0-20200928043516-73acadd15bd0
 	github.com/PuerkitoBio/goquery v1.5.1
-	github.com/Qingluan/merkur v1.0.11
+	github.com/Qingluan/merkur v1.0.12
 	github.com/bingoohuang/xlsx v1.1.0
 	github.com/cheggaaa/pb v1.0.29
 	github.com/fatih/color v1.9.0
