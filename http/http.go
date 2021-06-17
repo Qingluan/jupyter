@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/Qingluan/merkur"
 	"github.com/cheggaaa/pb"
 
 	// "github.com/roberson-io/mmh3"
@@ -62,6 +63,21 @@ type Session struct {
 	Timeout           int
 	RandomeUA         bool
 	MultiGetRetryTime int
+	Proxy             string
+	Document          *goquery.Document
+}
+
+func (session *Session) Copy() *Session {
+	newsession := NewSession()
+	for k, v := range session.Header {
+		newsession.Header[k] = v
+	}
+	newsession.Timeout = session.Timeout
+	newsession.RandomeUA = session.RandomeUA
+	newsession.MultiGetRetryTime = session.MultiGetRetryTime
+	newsession.Proxy = session.Proxy
+
+	return newsession
 }
 
 type SmartResponse struct {
@@ -113,6 +129,7 @@ func (session *Session) SetProxyDialer(dialer proxy.Dialer) {
 }
 
 func (session *Session) SetSocks5Proxy(proxyAddr string) (err error) {
+	session.Proxy = proxyAddr
 	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
 	if err != nil {
 		return err
@@ -145,6 +162,12 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 	if session.Transprot.Dial != nil {
 		transport.Dial = session.Transprot.Dial
 	}
+	if session.Proxy != "" {
+		dialer := merkur.NewProxyDialer(proxyObj)
+		if dialer != nil {
+			transport.Dial = dialer.Dial
+		}
+	}
 	if proxyObj != nil && DefaultProxyDialer != nil {
 		if proxyObj[0] == nil {
 			log.Fatal("proxy is nil !!")
@@ -175,13 +198,34 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 
 		transport.Dial = dialer.Dial
 
-	} else {
-		// log.Println("empty proxy ")
+	} else if proxyObj != nil {
+		dialer := merkur.NewProxyDialer(proxyObj)
+		transport.Dial = dialer.Dial
 	}
+
 	client = &httplib.Client{
 		Transport: &transport,
 		Timeout:   time.Duration(session.Timeout) * time.Second,
 	}
+	return
+}
+
+/**
+With will save res to Docuemtn tmporially, then can each to cssselect do some
+*/
+func (session *Session) With(urlstr string, proxy ...interface{}) (with *WithOper) {
+	res, err := session.Get(urlstr, proxy...)
+	if err != nil {
+		log.Println("http err:", err)
+		with.Err = err
+		return
+	}
+	if d := res.Soup(); d != nil {
+		with = new(WithOper)
+		with.Document = d
+		with.URL, with.Err = url.Parse(urlstr)
+	}
+
 	return
 }
 
@@ -202,6 +246,7 @@ func (session *Session) Get(url string, proxy ...interface{}) (resp *SmartRespon
 	for k, v := range session.Header {
 		req.Header.Set(k, v)
 	}
+
 	client := session.getClient(proxy...)
 	if client == nil {
 		return nil, fmt.Errorf("Proxy Set Error: %v", proxy)
@@ -233,6 +278,7 @@ func (session *Session) Post(httpurl string, data map[string]string, proxy ...in
 
 	req, err := httplib.NewRequest("POST", httpurl, strings.NewReader(u.Encode()))
 	req.Header.Set("Content-type", "application/x-www-form-urlencoded")
+
 	client := session.getClient(proxy...)
 	if client == nil {
 		return nil, fmt.Errorf("Proxy Set Error: %v", proxy)
@@ -318,18 +364,18 @@ func (session *Session) Upload(url string, filePath string, fileKey string, data
 		}
 
 		if part, err = mpw.CreateFormFile(fileKey, fi.Name()); err != nil {
-			log.Println("Upload Create:",err)
-			return 
+			log.Println("Upload Create:", err)
+			return
 		}
 		if showBar {
 			part = io.MultiWriter(part, bar)
 		}
 		if _, err = io.Copy(part, fp); err != nil {
-			log.Println("Upload io COPY:",err)
+			log.Println("Upload io COPY:", err)
 			return
 		}
 		if err = mpw.Close(); err != nil {
-			log.Println("Upload Close:",err)
+			log.Println("Upload Close:", err)
 			return
 		}
 	}()
