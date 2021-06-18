@@ -1,8 +1,10 @@
 package http
 
 import (
+	"encoding/json"
 	"log"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -17,6 +19,19 @@ type WithOper struct {
 	Links          Links
 	Article        *Article
 	Err            error
+	sess           *Session
+}
+
+var (
+	MsgCacheChan = make(chan string)
+	CacheStatus  = false
+)
+
+type Article struct {
+	Text   string    `json:"text"`
+	Title  string    `json:"title"`
+	Date   time.Time `json:"date"`
+	Author string    `json:"author"`
 }
 
 var (
@@ -33,6 +48,7 @@ var (
 		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2}`):                            "2006/1/2",
 		regexp.MustCompile(`\w{1,15}, \d{1,2} \w{1,15} \d{4}`):                      "Mon, 02 Jan 2006",
 		regexp.MustCompile(`\d{1,2} \w{1,15} \d{4}`):                                "02 Jan 2006",
+		regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}Z`):                "2006-01-02T10:27:21Z",
 	}
 )
 
@@ -54,20 +70,69 @@ func (with *WithOper) For(do func(i int, s *Selection)) *WithOper {
 }
 
 func (with *WithOper) AsArticle() *WithOper {
-	with.Article = NewArticle(with.Document)
-	// with.Article = new(Article)
-	// with.Each("title", func(i int, s *Selection) {
-	// 	with.Article.Title = strings.TrimSpace(s.Text())
-	// })
-	// text := with.Document.Text()
-	// var err error
-	// for match, temp := range DateMatcher {
-	// 	if res := match.FindAllString(text, -1); len(res) > 0 {
-	// 		with.Article.Date, err = time.Parse(temp, res[0])
-	// 		log.Println("parse time err:", err)
-	// 		break
-	// 	}
-	// }
+	if ar := NewArticle(with.Document); ar != nil {
+		// with.Articles = append(with.Articles, ar)
+		with.Article = ar
+	}
+	return with
+}
+
+func (article *Article) WaitToFile() {
+	// bufstr := ""
+	// for article := range with.Articles {
+	buf, err := json.Marshal(article)
+	if err != nil {
+		log.Println("ToFile Err:", err)
+		// continue
+		return
+	}
+	MsgCacheChan <- string(buf)
+}
+
+func (with *WithOper) StartCache(name string) *WithOper {
+	if !CacheStatus {
+		log.Println("start Cache:", name)
+		CacheStatus = true
+		go func(msg *chan string) {
+			defer func() { CacheStatus = false }()
+
+			bufstr := ""
+			tick := time.NewTicker(time.Second * 3)
+			for {
+				select {
+				case i := <-*msg:
+					if i == "[END]" {
+						break
+					}
+
+					bufstr += i + "\n"
+				case <-tick.C:
+					if bufstr != "" {
+						fp, err := os.OpenFile(name, os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
+						if err != nil {
+							log.Println("to file err :", err)
+							break
+						}
+						fp.WriteString(bufstr)
+						fp.Close()
+						bufstr = ""
+					}
+				}
+
+			}
+		}(&MsgCacheChan)
+	} else {
+		log.Println("[stop old Cache]")
+		MsgCacheChan <- "[END]"
+		CacheStatus = false
+		with.StartCache(name)
+	}
+	return with
+}
+
+func (with *WithOper) EndCache() *WithOper {
+	MsgCacheChan <- "[END]"
+	CacheStatus = false
 	return with
 }
 
@@ -130,4 +195,8 @@ func NewArticle(doc *goquery.Document) (article *Article) {
 		article.Text = text1
 	}
 	return
+}
+
+func (with *WithOper) Entry(url string) *WithOper {
+	return with.sess.With(url)
 }

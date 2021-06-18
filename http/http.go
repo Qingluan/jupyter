@@ -129,7 +129,7 @@ func (session *Session) SetProxyDialer(dialer proxy.Dialer) {
 }
 
 func (session *Session) SetSocks5Proxy(proxyAddr string) (err error) {
-	session.Proxy = proxyAddr
+	session.Proxy = "socks5://" + proxyAddr
 	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
 	if err != nil {
 		return err
@@ -163,12 +163,12 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 		transport.Dial = session.Transprot.Dial
 	}
 	if session.Proxy != "" {
-		dialer := merkur.NewProxyDialer(proxyObj)
+		dialer := merkur.NewProxyDialer(session.Proxy)
 		if dialer != nil {
 			transport.Dial = dialer.Dial
 		}
 	}
-	if proxyObj != nil && DefaultProxyDialer != nil {
+	if proxyObj != nil {
 		if proxyObj[0] == nil {
 			log.Fatal("proxy is nil !!")
 		}
@@ -177,10 +177,12 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 		case proxy.Dialer:
 			dialer = proxyObj[0].(proxy.Dialer)
 		case string:
-			if proxyObj[0].(string) != "" {
+			if proxyObj[0].(string) != "" && DefaultProxyDialer != nil {
 				if dialer = DefaultProxyDialer(proxyObj[0]); dialer == nil {
 					log.Println("new proxy dialer create error:", proxyObj[0])
 				}
+			} else if DefaultProxyDialer == nil {
+				dialer = merkur.NewProxyDialer(proxyObj[0])
 			}
 		case ProxyDiallerPool:
 			ppol := proxyObj[0].(ProxyDiallerPool)
@@ -188,9 +190,12 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 		case nil:
 			panic("set proxy but null !")
 		default:
-			if dialer = DefaultProxyDialer(proxyObj[0]); dialer == nil {
-				log.Fatal(proxyObj[0])
+			if DefaultProxyDialer != nil {
+				if dialer = DefaultProxyDialer(proxyObj[0]); dialer == nil {
+					log.Fatal(proxyObj[0])
+				}
 			}
+
 		}
 		if dialer == nil {
 			return nil
@@ -198,9 +203,6 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 
 		transport.Dial = dialer.Dial
 
-	} else if proxyObj != nil {
-		dialer := merkur.NewProxyDialer(proxyObj)
-		transport.Dial = dialer.Dial
 	}
 
 	client = &httplib.Client{
@@ -208,6 +210,18 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 		Timeout:   time.Duration(session.Timeout) * time.Second,
 	}
 	return
+}
+
+func (session *Session) SetProxy(proxy interface{}) {
+	switch proxy.(type) {
+	case string:
+		session.Proxy = proxy.(string)
+
+	}
+	dialer := merkur.NewProxyDialer(proxy)
+	if dialer != nil {
+		session.SetProxyDialer(dialer)
+	}
 }
 
 /**
@@ -224,6 +238,7 @@ func (session *Session) With(urlstr string, proxy ...interface{}) (with *WithOpe
 		with = new(WithOper)
 		with.Document = d
 		with.URL, with.Err = url.Parse(urlstr)
+		with.sess = session.Copy()
 	}
 
 	return

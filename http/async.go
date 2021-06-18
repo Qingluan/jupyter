@@ -1,8 +1,6 @@
 package http
 
 import (
-	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -36,6 +34,18 @@ func (session *Session) StartAsync(i int) *Async {
 	return async
 }
 
+func (session *Session) Asyncs(work int, do func(each *AsyncOut), urls ...string) *Session {
+	if urls != nil {
+		asyn := session.StartAsync(work).Each(do)
+		for _, url := range urls {
+			asyn.Async(url)
+		}
+		asyn.EndAsync()
+
+	}
+	return session
+}
+
 func (async *Async) Async(url string, proxy ...string) *Async {
 	async.running++
 	if proxy != nil && proxy[0] == "" {
@@ -49,7 +59,7 @@ func (async *Async) EndAsync() *Session {
 
 	time.Sleep(1 * time.Second)
 	async.input <- "[END]"
-	log.Println("Wait to End:", async.running)
+	// log.Println("Wait to End:", async.running)
 	async.lock.Wait()
 	return async.session
 }
@@ -59,7 +69,7 @@ func (async *Async) Each(do func(out *AsyncOut)) *Async {
 	async.lock.Add(1)
 	go func(cal func(res *AsyncOut), l *sync.WaitGroup, out chan AsyncOut) {
 		defer l.Done()
-		defer fmt.Println("End Each")
+		// defer fmt.Println("End Each")
 		for {
 			outres := <-out
 			// log.Println("Out:", outres.Url)
@@ -76,7 +86,7 @@ func (async *Async) Each(do func(out *AsyncOut)) *Async {
 
 func (async *Async) run(as *sync.WaitGroup) {
 	defer as.Done()
-	defer fmt.Println("End run")
+	// defer fmt.Println("End run")
 	// c := 0
 	outchan := async.out
 	lock := sync.WaitGroup{}
@@ -92,13 +102,9 @@ func (async *Async) run(as *sync.WaitGroup) {
 		lock.Add(1)
 		go func(cond *sync.WaitGroup, out chan AsyncOut, sess *Session, url string) {
 			defer cond.Done()
-			// defer counter.Done()
-			// sess.With(url)
-			if sess.Proxy != "" {
-				sess.SetSocks5Proxy(sess.Proxy)
-			}
+			// fmt.Println("async:", url, sess.Proxy)
+
 			with := sess.With(url)
-			// fmt.Println("async:", with.URL, sess.Proxy)
 
 			res := AsyncOut{
 				Url: url,

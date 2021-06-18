@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
 var (
@@ -23,13 +22,6 @@ type UrlSim struct {
 	url     string
 	no_w    []string
 	structs []string
-}
-
-type Article struct {
-	Text   string
-	Title  string
-	Date   time.Time
-	Author string
 }
 
 func AsUrlSim(urlstr string, title ...string) (u *UrlSim) {
@@ -225,5 +217,41 @@ func (with *WithOper) News(filters ...FilterOption) *WithOper {
 	ff := min(filter.Rank, len(links))
 	links = links[:ff]
 	with.Links = links
+	return with
+}
+
+func (with *WithOper) AsSiteMap(do func(out *AsyncOut)) *WithOper {
+	asyncer := with.sess.StartAsync(5).Each(do)
+	// urls :=
+
+	entrys := []string{}
+	with.Each("loc", func(i int, s *Selection) {
+		url := s.Text()
+		if strings.HasSuffix(url, ".xml") {
+			entrys = append(entrys, url)
+		} else {
+			asyncer.Async(url)
+		}
+	})
+
+	for {
+		if len(entrys) == 0 {
+			break
+		}
+		tmps := []string{}
+		for _, url := range entrys {
+			log.Println("Entry:", url)
+			with.Entry(url).Each("loc", func(i int, s *Selection) {
+				url := s.Text()
+				if strings.HasSuffix(url, ".xml") {
+					tmps = append(tmps, url)
+				} else {
+					asyncer.Async(url)
+				}
+			})
+		}
+		entrys = append([]string{}, tmps...)
+		// }
+	}
 	return with
 }
