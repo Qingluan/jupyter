@@ -90,8 +90,14 @@ type SmartResponse struct {
 // type Document goquery.Document
 
 func NewSession() (sess *Session) {
+	header := make(map[string]string)
+
+	for k, v := range DeafultHeaders {
+		header[k] = v
+	}
+
 	sess = &Session{
-		Header: DeafultHeaders,
+		Header: header,
 		Transprot: httplib.Transport{
 			ResponseHeaderTimeout: 22 * time.Second,
 		},
@@ -166,6 +172,8 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 		dialer := merkur.NewProxyDialer(session.Proxy)
 		if dialer != nil {
 			transport.Dial = dialer.Dial
+		} else {
+			log.Fatal("failed to proxy ")
 		}
 	}
 	if proxyObj != nil {
@@ -183,6 +191,9 @@ func (session *Session) getClient(proxyObj ...interface{}) (client *httplib.Clie
 				}
 			} else if DefaultProxyDialer == nil {
 				dialer = merkur.NewProxyDialer(proxyObj[0])
+				if dialer == nil {
+					log.Fatal("Failed to create proxy dialer")
+				}
 			}
 		case ProxyDiallerPool:
 			ppol := proxyObj[0].(ProxyDiallerPool)
@@ -231,6 +242,7 @@ func (session *Session) With(urlstr string, proxy ...interface{}) (with *WithOpe
 	res, err := session.Get(urlstr, proxy...)
 	if err != nil {
 		log.Println("http err:", err)
+		with = new(WithOper)
 		with.Err = err
 		return
 	}
@@ -549,12 +561,22 @@ func (smartres *SmartResponse) HeaderString() (d string) {
 
 // Get Soup
 func (smartres *SmartResponse) Soup() (m *goquery.Document) {
-	pre := bytes.NewBuffer(smartres.Html())
-	ebuffer, err := DecodeHTMLBody(pre, "")
-	if err != nil {
-		log.Fatal("can not decode html")
-	}
-	d, e := goquery.NewDocumentFromReader(ebuffer)
+	allbuf := smartres.Html()
+	defer smartres.Body.Close()
+
+	// pre := bytes.NewBuffer(allbuf)
+	// ebuffer, err := DecodeHTMLBody(pre, "")
+	// if err != nil {
+	// 	log.Fatal("can not decode html")
+	// }
+
+	// d, e := goquery.NewDocumentFromReader(ebuffer)
+	// h, _ := d.Html()
+	// if len(h) != len(allbuf) {
+	// log.Println("Warnning: diff try raw")
+	// d, e = goquery.NewDocumentFromReader(bytes.NewBuffer(allbuf))
+	// }
+	d, e := goquery.NewDocumentFromReader(bytes.NewBuffer(allbuf))
 	if e != nil {
 		return nil
 	} else {

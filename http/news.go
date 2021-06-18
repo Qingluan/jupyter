@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 	"path/filepath"
@@ -220,38 +221,81 @@ func (with *WithOper) News(filters ...FilterOption) *WithOper {
 	return with
 }
 
-func (with *WithOper) AsSiteMap(do func(out *AsyncOut)) *WithOper {
-	asyncer := with.sess.StartAsync(5).Each(do)
+func Skip(u string, us ...string) bool {
+	for _, uu := range us {
+		if uu == u {
+			return true
+		}
+	}
+	return false
+}
+
+func (with *WithOper) AsSiteMap(do func(out *AsyncOut), skip ...string) *WithOper {
+	// asyncer := with.sess.StartAsync(7).Each(do)
 	// urls :=
 
 	entrys := []string{}
+	urls := []string{}
+	// h, _ := with.Document.Html()
+	// log.Println("do :", h)
 	with.Each("loc", func(i int, s *Selection) {
 		url := s.Text()
 		if strings.HasSuffix(url, ".xml") {
-			entrys = append(entrys, url)
+			if !Skip(url, skip...) {
+				entrys = append(entrys, url)
+			} else {
+				fmt.Println("\rSkip:", url)
+			}
+
 		} else {
-			asyncer.Async(url)
+			// log.Println(url)
+			urls = append(urls, url)
+			// asyncer.Async(url)
+			// log.Println(url)
 		}
 	})
+	// log.Println("1....")
+	with.sess.Asyncs(5, do, urls...)
+	// log.Println("end")
 
+	// urls = []string{}
 	for {
 		if len(entrys) == 0 {
 			break
 		}
 		tmps := []string{}
 		for _, url := range entrys {
-			log.Println("Entry:", url)
-			with.Entry(url).Each("loc", func(i int, s *Selection) {
+			nw := with.Entry(url)
+
+			if nw.Err != nil {
+				log.Println("url err:", nw.Err)
+			}
+			// h, _ := nw.Document.Html()
+			// log.Println(h)
+			nw.Each("loc", func(i int, s *Selection) {
 				url := s.Text()
+
 				if strings.HasSuffix(url, ".xml") {
-					tmps = append(tmps, url)
+					if !Skip(url, skip...) {
+						tmps = append(tmps, url)
+					} else {
+						fmt.Println("\rSkip:", url)
+					}
 				} else {
-					asyncer.Async(url)
+					// asyncer.Async(url)
+					urls = append(urls, url)
 				}
 			})
+			log.Println("\rEntry:", url, "count:", len(urls))
+
+			with.sess.Asyncs(5, do, urls...)
+			urls = []string{}
 		}
+
 		entrys = append([]string{}, tmps...)
 		// }
 	}
+	// asyncer.EndAsync()
+	// log.Println("end all")
 	return with
 }

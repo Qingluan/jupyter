@@ -1,36 +1,49 @@
 package main
 
 import (
-	"fmt"
+	"flag"
+	"io/ioutil"
+	"log"
+	"strings"
 
 	"github.com/Qingluan/jupyter/http"
 )
 
 func main() {
+	url := ""
+	surl := ""
+	proxy := ""
+	save := ""
+	flag.StringVar(&url, "u", "", "sitemap url")
+	flag.StringVar(&surl, "S", "skip.txt", "sitemap url skip this")
+	flag.StringVar(&proxy, "p", "socks5://127.0.0.1:1091", "sitemap url proxy")
+	flag.StringVar(&save, "o", "out.json", "sitemap out.json")
+
+	flag.Parse()
+
+	buf, err := ioutil.ReadFile(surl)
+	skips := []string{}
+	if err != nil {
+		log.Println("err:", err)
+	}
+	for _, l := range strings.Split(string(buf), "\n") {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		skips = append(skips, strings.TrimSpace(l))
+	}
 	session := http.NewSession()
-	// for _, link := range session.With(os.Args[1]).News().Links[0] {
-	// 	log.Println(link)
+	// pool := merkur.NewProxyPool(proxy)
 
-	// }
-	// _, err := session.Get("https://www.google.com")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Println("test ok")
-	session.SetProxy("socks5://127.0.0.1:1091")
-	UA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36"
-	session.SetHeader("User-agent", UA)
-	// https://cn.nytstyle.com/international/20160728/mass-killings-contagion-copycat/zh-hant/
-	// https://cn.nytimes.com/usa/20160726/cc26dnclive/zh-hant/
-	// https://cn.nytstyle.com/international/20160728/dnc-biden-kaine-obama/zh-hant/
-	// //
-
-	session.With("https://www.bbc.com/sitemaps/https-sitemap-com-archive-2.xml").StartCache("bbc.json").
+	session.SetProxy(proxy)
+	session.RandomeUA = true
+	session.With(url).StartCache(save).
 		AsSiteMap(func(with *http.AsyncOut) {
 			with.Res.AsArticle()
 			with.Res.Article.WaitToFile()
-			fmt.Print(".")
-		}).EndCache()
+			// fmt.Print(".")
+			// log.Println(" - ", with.Res.Article.Title)
+		}, skips...).EndCache()
 	// Each().
 	// EndAsync()
 

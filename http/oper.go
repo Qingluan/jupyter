@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -20,6 +21,7 @@ type WithOper struct {
 	Article        *Article
 	Err            error
 	sess           *Session
+	lock           sync.WaitGroup
 }
 
 var (
@@ -70,14 +72,19 @@ func (with *WithOper) For(do func(i int, s *Selection)) *WithOper {
 }
 
 func (with *WithOper) AsArticle() *WithOper {
-	if ar := NewArticle(with.Document); ar != nil {
-		// with.Articles = append(with.Articles, ar)
-		with.Article = ar
+	if with.Document != nil {
+		if ar := NewArticle(with.Document); ar != nil {
+			// with.Articles = append(with.Articles, ar)
+			with.Article = ar
+		}
 	}
 	return with
 }
 
 func (article *Article) WaitToFile() {
+	if article == nil {
+		return
+	}
 	// bufstr := ""
 	// for article := range with.Articles {
 	buf, err := json.Marshal(article)
@@ -91,23 +98,29 @@ func (article *Article) WaitToFile() {
 
 func (with *WithOper) StartCache(name string) *WithOper {
 	if !CacheStatus {
-		log.Println("start Cache:", name)
-		CacheStatus = true
-		go func(msg *chan string) {
-			defer func() { CacheStatus = false }()
 
+		CacheStatus = true
+		with.lock.Add(1)
+		go func(msg *chan string, l *sync.WaitGroup) {
+			defer l.Done()
+			defer func() { CacheStatus = false }()
+			defer log.Println("End Cache")
+			log.Println("start Cache:", name)
 			bufstr := ""
 			tick := time.NewTicker(time.Second * 3)
+		E:
 			for {
 				select {
 				case i := <-*msg:
 					if i == "[END]" {
-						break
+						break E
 					}
-
+					// log.Println("[FILE] :", "<-", i)
 					bufstr += i + "\n"
 				case <-tick.C:
 					if bufstr != "" {
+						// log.Println("[SAVE] :", "->", name)
+
 						fp, err := os.OpenFile(name, os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
 						if err != nil {
 							log.Println("to file err :", err)
@@ -120,7 +133,19 @@ func (with *WithOper) StartCache(name string) *WithOper {
 				}
 
 			}
-		}(&MsgCacheChan)
+			if bufstr != "" {
+				// log.Println("[SAVE] :", "->", name)
+
+				fp, err := os.OpenFile(name, os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
+				if err != nil {
+					log.Println("to file err :", err)
+					// break
+				}
+				fp.WriteString(bufstr)
+				fp.Close()
+				bufstr = ""
+			}
+		}(&MsgCacheChan, &with.lock)
 	} else {
 		log.Println("[stop old Cache]")
 		MsgCacheChan <- "[END]"
@@ -133,6 +158,7 @@ func (with *WithOper) StartCache(name string) *WithOper {
 func (with *WithOper) EndCache() *WithOper {
 	MsgCacheChan <- "[END]"
 	CacheStatus = false
+	with.lock.Wait()
 	return with
 }
 
