@@ -2,12 +2,15 @@ package http
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 var (
@@ -230,10 +233,41 @@ func Skip(u string, us ...string) bool {
 	return false
 }
 
-func (with *WithOper) AsSiteMap(do func(out *AsyncOut), skip ...string) *WithOper {
+func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool, showState bool, skip ...string) *WithOper {
 	// asyncer := with.sess.StartAsync(7).Each(do)
 	// urls :=
+	name := filepath.Join(os.TempDir(), "skip-site.txt")
 
+	done := map[string]int{}
+	save := func(u string) {
+		fp, err := os.OpenFile(name, os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
+		if err != nil {
+			log.Println("cache tmp err:", err)
+			return
+		}
+		defer fp.Close()
+		fp.WriteString(u + "\n")
+	}
+
+	if breakpointContinue {
+		buf, err := ioutil.ReadFile(name)
+		if err != nil {
+			log.Println("no cached site-map")
+		} else {
+			for _, l := range strings.Split(string(buf), "\n") {
+				lll := strings.TrimSpace(l)
+				if lll != "" && strings.HasPrefix(lll, "http") && strings.HasSuffix(lll, ".xml") {
+					done[lll] = 1
+				}
+			}
+		}
+	} else {
+		for _, lll := range skip {
+			if lll != "" && strings.HasPrefix(lll, "http") && strings.HasSuffix(lll, ".xml") {
+				done[lll] = 1
+			}
+		}
+	}
 	entrys := []string{}
 	urls := []string{}
 	// h, _ := with.Document.Html()
@@ -241,8 +275,9 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), skip ...string) *WithOpe
 	with.Each("loc", func(i int, s *Selection) {
 		url := s.Text()
 		if strings.HasSuffix(url, ".xml") {
-			if !Skip(url, skip...) {
+			if _, ok := done[url]; !ok {
 				entrys = append(entrys, url)
+				// save(url)
 			} else {
 				fmt.Println("\rSkip:", url)
 			}
@@ -255,29 +290,25 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), skip ...string) *WithOpe
 		}
 	})
 	// log.Println("1....")
-	with.sess.Asyncs(5, do, urls...)
+	with.sess.Asyncs(3, true, showState, do, urls...)
 	// log.Println("end")
 
 	// urls = []string{}
+	allcount := 0
 	for {
 		if len(entrys) == 0 {
 			break
 		}
 		tmps := []string{}
 		for _, url := range entrys {
-			nw := with.Entry(url)
-
-			if nw.Err != nil {
-				log.Println("url err:", nw.Err)
-			}
-			// h, _ := nw.Document.Html()
-			// log.Println(h)
-			nw.Each("loc", func(i int, s *Selection) {
+			// Info("entry :", url)
+			with.Entry(url).Each("loc", func(i int, s *Selection) {
 				url := s.Text()
 
 				if strings.HasSuffix(url, ".xml") {
-					if !Skip(url, skip...) {
+					if _, ok := done[url]; !ok {
 						tmps = append(tmps, url)
+
 					} else {
 						fmt.Println("\rSkip:", url)
 					}
@@ -286,9 +317,50 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), skip ...string) *WithOpe
 					urls = append(urls, url)
 				}
 			})
-			log.Println("\rEntry:", url, "count:", len(urls))
+			// Success("entry :", url)
+			c := 0
+			for {
+				if len(urls) == 0 {
+					if c > 10 {
+						Failed("no news :", url)
 
-			with.sess.Asyncs(5, do, urls...)
+						break
+					}
+					c += 1
+					Failed("failed get news , wait ", c*10, " , try again ...")
+					time.Sleep(time.Duration(c*10) * time.Second)
+					with.Entry(url).Each("loc", func(i int, s *Selection) {
+						url := s.Text()
+
+						if strings.HasSuffix(url, ".xml") {
+							if _, ok := done[url]; !ok {
+								tmps = append(tmps, url)
+
+							} else {
+								fmt.Println("\rSkip:", url)
+							}
+						} else {
+							// asyncer.Async(url)
+							urls = append(urls, url)
+						}
+					})
+				} else {
+					break
+				}
+			}
+
+			if len(urls) > 0 {
+				allcount += len(urls)
+				Success("Entry:", url, " count: ", len(urls), "/", allcount)
+
+				for i := 0; i < len(urls)/20; i++ {
+					L("\rEntry:", url, " count: ", len(urls), "  Sleep : ", i, "/", len(urls)/20)
+					time.Sleep(1 * time.Second)
+				}
+				with.sess.Asyncs(3, true, showState, do, urls...)
+				save(url)
+			}
+
 			urls = []string{}
 		}
 

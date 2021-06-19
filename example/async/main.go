@@ -2,9 +2,6 @@ package main
 
 import (
 	"flag"
-	"io/ioutil"
-	"log"
-	"strings"
 
 	"github.com/Qingluan/jupyter/http"
 )
@@ -21,17 +18,17 @@ func main() {
 
 	flag.Parse()
 
-	buf, err := ioutil.ReadFile(surl)
-	skips := []string{}
-	if err != nil {
-		log.Println("err:", err)
-	}
-	for _, l := range strings.Split(string(buf), "\n") {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		skips = append(skips, strings.TrimSpace(l))
-	}
+	// buf, err := ioutil.ReadFile(surl)
+	// skips := []string{}
+	// if err != nil {
+	// 	log.Println("err:", err)
+	// }
+	// for _, l := range strings.Split(string(buf), "\n") {
+	// 	if strings.TrimSpace(l) == "" {
+	// 		continue
+	// 	}
+	// 	skips = append(skips, strings.TrimSpace(l))
+	// }
 	session := http.NewSession()
 	// pool := merkur.NewProxyPool(proxy)
 
@@ -43,7 +40,7 @@ func main() {
 			with.Res.Article.WaitToFile()
 			// fmt.Print(".")
 			// log.Println(" - ", with.Res.Article.Title)
-		}, skips...).EndCache()
+		}, true, true).EndCache()
 	// Each().
 	// EndAsync()
 

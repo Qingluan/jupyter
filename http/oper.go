@@ -34,6 +34,7 @@ type Article struct {
 	Title  string    `json:"title"`
 	Date   time.Time `json:"date"`
 	Author string    `json:"author"`
+	Link   string    `json:"link"`
 }
 
 var (
@@ -75,7 +76,9 @@ func (with *WithOper) AsArticle() *WithOper {
 	if with.Document != nil {
 		if ar := NewArticle(with.Document); ar != nil {
 			// with.Articles = append(with.Articles, ar)
+			ar.Link = with.URL.String()
 			with.Article = ar
+
 		}
 	}
 	return with
@@ -104,8 +107,8 @@ func (with *WithOper) StartCache(name string) *WithOper {
 		go func(msg *chan string, l *sync.WaitGroup) {
 			defer l.Done()
 			defer func() { CacheStatus = false }()
-			defer log.Println("End Cache")
-			log.Println("start Cache:", name)
+			defer Failed("End Cache")
+			Success("start Cache:", name)
 			bufstr := ""
 			tick := time.NewTicker(time.Second * 3)
 		E:
@@ -147,7 +150,7 @@ func (with *WithOper) StartCache(name string) *WithOper {
 			}
 		}(&MsgCacheChan, &with.lock)
 	} else {
-		log.Println("[stop old Cache]")
+		Success("[stop old Cache]")
 		MsgCacheChan <- "[END]"
 		CacheStatus = false
 		with.StartCache(name)
