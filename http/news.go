@@ -15,6 +15,23 @@ import (
 
 var (
 	NW = regexp.MustCompile(`\W`)
+
+	DateMatcher = map[*regexp.Regexp]string{
+		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日 \d{1,2}\:\d{1,2}\:\d{1,2}`): "2006年1月2日 15:04:05",
+		regexp.MustCompile(`[1-2]\d{3}年[0-1]\d月[0-3]\d日 [0-2]\d\:[0-5]\d\:\d{2}`):   "2006年1月2日 15:04:05",
+		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2} \d{1,2}\:\d{1,2}\:\d{1,2}`):  "2006-1-2 15:04:05",
+		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2} \d{1,2}\:\d{1,2}\:\d{1,2}`):  "2006/1/2 15:04:05",
+		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2} \d{1,2}\:\d{1,2}`):           "2006/1/2 15:04",
+		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日 \d{1,2}\:\d{1,2}`):          "2006年1月2日 15:04",
+		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2} \d{1,2}\:\d{1,2}`):           "2006-1-2 15:04",
+		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日`):                           "2006年1月2日",
+		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2}`):                            "2006-1-2",
+		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2}`):                            "2006/1/2",
+		regexp.MustCompile(`\w{1,15}, \d{1,2} \w{1,15} \d{4}`):                      "Mon, 02 Jan 2006",
+		regexp.MustCompile(`\d{1,2} \w{1,15} \d{4}`):                                "02 Jan 2006",
+		regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}Z`):                "2006-01-02T10:27:21Z",
+		regexp.MustCompile(`\d{2}\.\d{2}\.\d{4}`):                                   "02.01.2006",
+	}
 )
 
 type UrlSim struct {
@@ -233,9 +250,45 @@ func Skip(u string, us ...string) bool {
 	return false
 }
 
-func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool, showState bool, skip ...string) *WithOper {
-	// asyncer := with.sess.StartAsync(7).Each(do)
-	// urls :=
+func (with *WithOper) PreTestSkip(name string, urls ...string) (o []string) {
+	name2 := filepath.Join(os.TempDir(), name)
+	buf, err := ioutil.ReadFile(name2)
+	if err != nil {
+		Failed("no such cached!:", name2)
+		ioutil.WriteFile(name2, []byte(""), os.ModePerm)
+		// return async
+		return
+	}
+
+	Success("Pre Test breakpoint :", name)
+	e := make(map[string]int)
+	for _, l := range strings.Split(string(buf), "\n") {
+		ll := strings.TrimSpace(l)
+		if strings.HasPrefix(ll, "http") {
+			e[ll] = 0
+		}
+	}
+	for _, u := range urls {
+		if _, ok := e[u]; !ok {
+			o = append(o, u)
+		}
+	}
+	return
+
+}
+
+/** AsSiteMap 爬取site-map
+提取xml sitemap的大部分标准
+
+>@breakpointContinue 开启断点续传，会自动读取和存储 已爬页面到 /tmp/default-skip.txt 和 /tmp/skip-site.txt
+
+>@showState 开启状态显示
+
+>@filter 通过url 过滤每个channel true to entry false not entry
+	example  func(u string){ return strings.Contains(u,"/zh/")}
+
+*/
+func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool, showState bool, filter func(chanelUrl string) bool) *WithOper {
 	name := filepath.Join(os.TempDir(), "skip-site.txt")
 
 	done := map[string]int{}
@@ -261,13 +314,8 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool,
 				}
 			}
 		}
-	} else {
-		for _, lll := range skip {
-			if lll != "" && strings.HasPrefix(lll, "http") && strings.HasSuffix(lll, ".xml") {
-				done[lll] = 1
-			}
-		}
 	}
+
 	entrys := []string{}
 	urls := []string{}
 	// h, _ := with.Document.Html()
@@ -276,7 +324,13 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool,
 		url := s.Text()
 		if strings.HasSuffix(url, ".xml") {
 			if _, ok := done[url]; !ok {
-				entrys = append(entrys, url)
+				if filter != nil {
+					if filter(url) {
+						entrys = append(entrys, url)
+					}
+				} else {
+					entrys = append(entrys, url)
+				}
 				// save(url)
 			} else {
 				fmt.Println("\rSkip:", url)
@@ -290,7 +344,7 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool,
 		}
 	})
 	// log.Println("1....")
-	with.sess.Asyncs(3, true, showState, do, urls...)
+	with.sess.Asyncs(7, true, showState, do, urls...)
 	// log.Println("end")
 
 	// urls = []string{}
@@ -307,8 +361,13 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool,
 
 				if strings.HasSuffix(url, ".xml") {
 					if _, ok := done[url]; !ok {
-						tmps = append(tmps, url)
-
+						if filter != nil {
+							if filter(url) {
+								tmps = append(tmps, url)
+							}
+						} else {
+							tmps = append(tmps, url)
+						}
 					} else {
 						fmt.Println("\rSkip:", url)
 					}
@@ -350,15 +409,49 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool,
 			}
 
 			if len(urls) > 0 {
-				allcount += len(urls)
-				Success("Entry:", url, " count: ", len(urls), "/", allcount)
+				// 预先测试是否存在跳过urls
+				readyUrls := with.PreTestSkip(DEFAULT_BREAKPOINT_FILE, urls...)
+				// 如果太多，再分片
+				if len(readyUrls) > 300 {
+					t := readyUrls[:300]
+					readyUrls = readyUrls[300:]
+					for {
 
-				for i := 0; i < len(urls)/20; i++ {
-					L("\rEntry:", url, " count: ", len(urls), "  Sleep : ", i, "/", len(urls)/20)
-					time.Sleep(1 * time.Second)
+						allcount += len(t)
+						Success(Yello(" Current: ", len(t), " Left:", len(readyUrls), " Fin:", allcount), " Entry:", url)
+
+						for i := 0; i < len(t)/20; i++ {
+							L(" Wait : ", i, "/", len(t)/20, " s")
+							time.Sleep(1 * time.Second)
+						}
+						with.sess.Asyncs(3, true, showState, do, t...)
+						if len(readyUrls) < 300 {
+							break
+						}
+						t = readyUrls[:300]
+						readyUrls = readyUrls[300:]
+					}
+					Success(Yello(" Left:", len(readyUrls), " Fin:", allcount), " Entry:", url)
+
+					for i := 0; i < len(readyUrls)/20; i++ {
+						L(" Wait : ", i, "/", len(t)/20, " s")
+						time.Sleep(1 * time.Second)
+					}
+					with.sess.Asyncs(3, true, showState, do, readyUrls...)
+
+				} else {
+					allcount += len(readyUrls)
+					Success(Yello("Left: ", len(readyUrls), " Fin:", allcount), " Entry:", url)
+
+					for i := 0; i < len(readyUrls)/20; i++ {
+						L(" Left: ", len(readyUrls), "  Wait : ", i, "/", len(readyUrls)/20)
+						time.Sleep(1 * time.Second)
+					}
+					with.sess.Asyncs(3, true, showState, do, readyUrls...)
+
 				}
-				with.sess.Asyncs(3, true, showState, do, urls...)
 				save(url)
+
 			}
 
 			urls = []string{}

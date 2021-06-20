@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -37,23 +36,7 @@ type Article struct {
 	Link   string    `json:"link"`
 }
 
-var (
-	DateMatcher = map[*regexp.Regexp]string{
-		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日 \d{1,2}\:\d{1,2}\:\d{1,2}`): "2006年1月2日 15:04:05",
-		regexp.MustCompile(`[1-2]\d{3}年[0-1]\d月[0-3]\d日 [0-2]\d\:[0-5]\d\:\d{2}`):   "2006年1月2日 15:04:05",
-		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2} \d{1,2}\:\d{1,2}\:\d{1,2}`):  "2006-1-2 15:04:05",
-		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2} \d{1,2}\:\d{1,2}\:\d{1,2}`):  "2006/1/2 15:04:05",
-		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2} \d{1,2}\:\d{1,2}`):           "2006/1/2 15:04",
-		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日 \d{1,2}\:\d{1,2}`):          "2006年1月2日 15:04",
-		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2} \d{1,2}\:\d{1,2}`):           "2006-1-2 15:04",
-		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日`):                           "2006年1月2日",
-		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2}`):                            "2006-1-2",
-		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2}`):                            "2006/1/2",
-		regexp.MustCompile(`\w{1,15}, \d{1,2} \w{1,15} \d{4}`):                      "Mon, 02 Jan 2006",
-		regexp.MustCompile(`\d{1,2} \w{1,15} \d{4}`):                                "02 Jan 2006",
-		regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}Z`):                "2006-01-02T10:27:21Z",
-	}
-)
+var ()
 
 func (with *WithOper) Each(css string, do ...func(i int, s *Selection)) *WithOper {
 	with.Document.Find(css).Each(func(i int, a *goquery.Selection) {
@@ -165,6 +148,39 @@ func (with *WithOper) EndCache() *WithOper {
 	return with
 }
 
+func FindMostMayDate(raw string) (t time.Time) {
+	// var err error
+	ts := []time.Time{}
+	for match, temp := range DateMatcher {
+		if res := match.FindAllString(raw, -1); len(res) > 0 {
+			t, err := time.Parse(temp, res[0])
+			if err != nil {
+				log.Println("parse time err:", err)
+				continue
+			} else {
+				// fmt.Println("Date:", temp, res[0])
+				ts = append(ts, t)
+			}
+			// break
+		}
+	}
+	// now := time.Now()
+	if len(ts) > 0 {
+		min := ts[0]
+		for _, tt := range ts {
+			if tt.After(min) {
+				min = tt
+			}
+		}
+		return min
+	} else {
+		log.Println("not found : use init")
+		// return nil
+		return time.Time{}
+	}
+
+}
+
 func NewArticle(doc *goquery.Document) (article *Article) {
 	article = new(Article)
 	text1 := ""
@@ -173,21 +189,11 @@ func NewArticle(doc *goquery.Document) (article *Article) {
 	})
 	doc.Find("script").Remove()
 	doc.Find("head").Remove()
-
-	doc.Find("li").Remove()
+	// doc.Find("li").Remove()
 	doc.Find("a").Remove()
 	raw := doc.Text()
 	// fmt.Println(raw)
-	var err error
-	for match, temp := range DateMatcher {
-		if res := match.FindAllString(raw, -1); len(res) > 0 {
-			article.Date, err = time.Parse(temp, res[0])
-			if err != nil {
-				log.Println("parse time err:", err)
-			}
-			break
-		}
-	}
+	article.Date = FindMostMayDate(raw)
 	doc.Find("p").Each(func(i int, s *goquery.Selection) {
 		text1 += strings.TrimSpace(s.Text()) + "\n"
 	})

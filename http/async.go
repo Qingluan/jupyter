@@ -9,6 +9,10 @@ import (
 	"time"
 )
 
+var (
+	DEFAULT_BREAKPOINT_FILE = "default-skip.txt"
+)
+
 type AsyncOut struct {
 	Url string
 	// Err error
@@ -25,8 +29,13 @@ type Async struct {
 	out          chan AsyncOut
 	runningState chan int
 	session      *Session
+	NeedRestart  bool
+	rawUrls      []string
 	do           func(out *AsyncOut)
 	save         func()
+
+	cache string
+	state bool
 	// errRateInterval int
 	// last
 }
@@ -49,7 +58,7 @@ func (session *Session) Asyncs(work int, loadCache bool, showState bool, do func
 	if urls != nil {
 		asyn := session.StartAsync(work)
 		if loadCache {
-			asyn.LoadCache("default-skip.txt")
+			asyn.LoadCache(DEFAULT_BREAKPOINT_FILE)
 		}
 		if showState {
 			asyn.State()
@@ -74,6 +83,7 @@ func (async *Async) Async(url string, proxy ...string) *Async {
 	if proxy != nil && proxy[0] == "" {
 		async.session.Proxy = ""
 	}
+	async.rawUrls = append(async.rawUrls, url)
 	async.input <- url
 	return async
 }
@@ -101,6 +111,8 @@ func (async *Async) Each(do func(out *AsyncOut)) *Async {
 		// defer fmt.Println("End Each")
 		time.Sleep(1 * time.Second)
 		tick := time.NewTicker(10 * time.Second)
+		errUrls := []string{}
+
 	E2:
 		for {
 			select {
@@ -115,10 +127,14 @@ func (async *Async) Each(do func(out *AsyncOut)) *Async {
 							delete(errTrys, outres.Url)
 							continue
 						}
+						errUrls = append(errUrls, outres.Url)
 						errTrys[outres.Url] = e + 1
+						Failed("try again ", e, " time :", outres.Url)
 					} else {
-						in <- outres.Url
+						// time.Sleep(2 * time.Second)
+						errUrls = append(errUrls, outres.Url)
 						errTrys[outres.Url] = 1
+						Failed("try again ", e, " time :", outres.Url)
 					}
 					continue
 				}
@@ -128,18 +144,47 @@ func (async *Async) Each(do func(out *AsyncOut)) *Async {
 				cal(&outres)
 
 			case <-tick.C:
+
 				if async.save != nil {
 					async.save()
 				}
+				for _, u := range errUrls {
+					in <- u
+				}
+				errUrls = []string{}
+
 			}
 			// *cal--
 
 		}
+
 	}(async.do, &async.lock, async.out, async.input)
 	return async
 }
+func (async *Async) Restart() *Async {
+	sess := async.EndAsync()
+	as := sess.StartAsync(async.num)
+	Success("Restart asyncs : ", Yello("state:", async.state, " cache:", async.cache, " num:", async.num))
+	if async.state {
+		as.State()
+	}
+	if async.cache != "" {
+		as.LoadCache(async.cache)
+	}
+	as.Each(async.do)
+	for _, url := range async.rawUrls {
+		if !Skip(url, async.Done...) {
+			as.Async(url)
+		}
+
+	}
+	as.EndAsync()
+
+	return as
+}
 
 func (async *Async) LoadCache(name string) *Async {
+	async.cache = name
 	name2 := filepath.Join(os.TempDir(), name)
 	buf, err := ioutil.ReadFile(name2)
 	if err != nil {
@@ -164,33 +209,44 @@ func (async *Async) LoadCache(name string) *Async {
 		us := async.Done
 
 		name2 := filepath.Join(os.TempDir(), name)
+		Success("Done:", len(async.Done), name)
 		ioutil.WriteFile(name2, []byte(strings.Join(us, "\n")+"\n"), os.ModePerm)
-		// fp, err := os.OpenFile(name2, os.O_APPEND|os.O_CREATE|os.O_RDWR, os.ModePerm)
-		// if err != nil {
-		// 	log.Println("cache tmp err:", err)
-		// 	return
-		// }
-		// defer fp.Close()
-		// fp.WriteString(strings.Join(us, "\n") + "\n")
-		// async.Done = []string{}
 	}
 	return async
 }
 func (async *Async) State() *Async {
-	L("show state")
+	L("show state           ")
+	async.state = true
 	go func() {
 		time.Sleep(3 * time.Second)
-
+		each := time.NewTicker(4 * time.Second)
+		stopTick := time.NewTicker(60 * time.Second)
+		lastFinish := 0
+	E3:
 		for {
-			c := len(async.runningState)
-			ic := len(async.input)
-			oc := len(async.out)
-			if c == 0 && ic == 0 && oc == 0 {
-				break
-			}
-			time.Sleep(4 * time.Second)
-			L(Green("running : ", c), " ", Yello(" input : ", ic), Green(" output:", oc), Yello(" Done: ", len(async.Done)), " ")
+			select {
+			case <-each.C:
 
+				c := len(async.runningState)
+				ic := len(async.input)
+				oc := len(async.out)
+				if c == 0 && ic == 0 && oc == 0 {
+					break E3
+				}
+				time.Sleep(4 * time.Second)
+				L(Green("running : ", c), " ", Yello(" input : ", ic), Green(" output:", oc), Yello(" Done: ", len(async.Done)), " ", GreenBack(time.Now().Format("2006/1/2 15:04:05")), "          ")
+			case <-stopTick.C:
+				c := len(async.Done)
+				if c == lastFinish {
+					async.NeedRestart = true
+					break E3
+				} else {
+					lastFinish = c
+				}
+			}
+		}
+		if async.NeedRestart {
+			async.Restart()
 		}
 	}()
 
@@ -264,14 +320,11 @@ func (async *Async) run(as *sync.WaitGroup) {
 			with := sess.With(url)
 
 			if with.Err != nil {
-				// d := time.Now().Sub(now)
 				errRate += 1
-
 			}
 
 			res := AsyncOut{
 				Url: url,
-				// Err: with.Err
 				Res: with,
 			}
 			out <- res

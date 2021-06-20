@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"strings"
 
 	"github.com/Qingluan/jupyter/http"
 )
@@ -31,6 +32,10 @@ func main() {
 			with.Res.AsArticle()
 			// 扔进队列等待缓存到本地
 			with.Res.Article.WaitToFile()
-		}, true, true).EndCache()
-
+		}, true, true, func(channelUrl string) bool {
+			if strings.Contains(channelUrl, "structures") {
+				return false
+			}
+			return strings.Contains(channelUrl, "/zh/")
+		}).EndCache()
 }
