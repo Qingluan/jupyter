@@ -94,6 +94,9 @@ func (async *Async) EndAsync() *Session {
 	async.input <- "[END]"
 	// log.Println("Wait to End:", async.running)
 	async.lock.Wait()
+	if async.save != nil {
+		async.save()
+	}
 	return async.session
 }
 

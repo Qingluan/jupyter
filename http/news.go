@@ -344,6 +344,8 @@ func (with *WithOper) AsSiteMap(do func(out *AsyncOut), breakpointContinue bool,
 		}
 	})
 	// log.Println("1....")
+	Success(Yello(" Channel :", len(entrys)))
+
 	with.sess.Asyncs(7, true, showState, do, urls...)
 	// log.Println("end")
 
