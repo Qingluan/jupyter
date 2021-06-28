@@ -22,15 +22,16 @@ var (
 		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2} \d{1,2}\:\d{1,2}\:\d{1,2}`):  "2006-1-2 15:04:05",
 		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2} \d{1,2}\:\d{1,2}\:\d{1,2}`):  "2006/1/2 15:04:05",
 		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2} \d{1,2}\:\d{1,2}`):           "2006/1/2 15:04",
+		regexp.MustCompile(`\d{2}\/\d{2}\/[1-2]\d{3} \- \d{2}\:\d{2}`):              "02/01/2006 - 15:04",
 		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日 \d{1,2}\:\d{1,2}`):          "2006年1月2日 15:04",
 		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2} \d{1,2}\:\d{1,2}`):           "2006-1-2 15:04",
 		regexp.MustCompile(`[1-2]\d{3}年\d{1,2}月\d{1,2}日`):                           "2006年1月2日",
 		regexp.MustCompile(`[1-2]\d{3}-\d{1,2}-\d{1,2}`):                            "2006-1-2",
 		regexp.MustCompile(`[1-2]\d{3}/\d{1,2}/\d{1,2}`):                            "2006/1/2",
-		regexp.MustCompile(`\w{1,15}, \d{1,2} \w{1,15} \d{4}`):                      "Mon, 02 Jan 2006",
-		regexp.MustCompile(`\d{1,2} \w{1,15} \d{4}`):                                "02 Jan 2006",
-		regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}\:\d{2}\:\d{2}Z`):                "2006-01-02T10:27:21Z",
-		regexp.MustCompile(`\d{2}\.\d{2}\.\d{4}`):                                   "02.01.2006",
+		regexp.MustCompile(`\w{1,15}, \d{1,2} \w{1,15} [1-2]\d{3}`):                 "Mon, 02 Jan 2006",
+		regexp.MustCompile(`\d{1,2} \w{1,15} [1-2]\d{3}`):                           "02 Jan 2006",
+		regexp.MustCompile(`[1-2]\d{3}-[0-1]\d-\d{2}T\d{2}\:\d{2}\:\d{2}Z`):         "2006-01-02T10:27:21Z",
+		regexp.MustCompile(`\d{2}\.[0-1]\d\.[1-2]\d{3}`):                            "02.01.2006",
 	}
 )
 
@@ -52,7 +53,7 @@ func AsUrlSim(urlstr string, title ...string) (u *UrlSim) {
 	u.len = len(urlstr)
 	f, err := url.Parse(urlstr)
 	if err != nil {
-		log.Fatal("err url:", urlstr)
+		log.Fatal("as url sim err url:", urlstr)
 	}
 	u.host = f.Host
 	u.structs = NW.Split(urlstr, -1)
@@ -172,6 +173,110 @@ func (link Links) AsString(rank int) (a [][]string) {
 		}
 	}
 	return
+}
+
+func filter(title, link string) (f bool) {
+	f = true
+	if len(title) < 8 {
+		return false
+	}
+
+	link_weight := ""
+	if link != "" {
+		ee := map[rune]int{}
+		for _, c := range strings.TrimSpace(link) {
+			ee[c] = 0
+		}
+		for c := range ee {
+			link_weight += string(c)
+		}
+
+		if link_weight == "#" {
+			return false
+		}
+
+		if link_weight == "/" {
+			return false
+		}
+	}
+	ee2 := map[rune]int{}
+	for _, c := range strings.TrimSpace(title) {
+		ee2[c] = 1
+	}
+	weight := ""
+	for c := range ee2 {
+		weight += string(c)
+	}
+
+	if len(weight) < 15 {
+		can := false
+		for _, k := range []string{":", "!", ","} {
+			if strings.Contains(title, k) {
+				can = true
+				break
+			}
+		}
+		if !can {
+			return false
+		}
+
+	}
+
+	if strings.Contains(title, ".com") {
+		return false
+	}
+
+	if strings.Contains(title, "@") && len(title) < 10 {
+		return false
+	}
+	if strings.Contains(title, "@") && strings.Contains(title, ".") && len(title) < 15 {
+		return false
+	}
+	if strings.Contains(title, "/") && len(title) < 16 {
+		return false
+	}
+	return
+}
+
+func (with *WithOper) SimpleNews() *WithOper {
+	links := Links{}
+	urls := []*UrlSim{}
+	basehost := with.URL.Hostname()
+	urlsm := map[string]string{}
+	with.Each("a[href]", func(i int, s *Selection) {
+		if href, ok := s.Attr("href"); ok {
+			t := s.Text()
+			if len(t) < 7 {
+				return
+			}
+			href = strings.TrimSpace(href)
+			if strings.HasPrefix(href, "/") {
+				href = filepath.Join(basehost, href)
+				urlsm[href] = t
+			} else if strings.HasPrefix(href, "http") {
+				urlsm[href] = t
+			} else if strings.HasPrefix(href, "javascript:;") {
+			} else if strings.Contains(href, "javascript:void(0)") {
+			} else {
+				// urlsm[href] = t
+
+			}
+			// fmt.Println(s.Text())
+
+		}
+
+	})
+
+	for i, v := range urlsm {
+		// log.Println(i, v)
+		if filter(v, i) {
+			urls = append(urls, AsUrlSim(i, v))
+		}
+
+	}
+	links = append(links, urls)
+	with.Links = links
+	return with
 }
 
 func (with *WithOper) News(filters ...FilterOption) *WithOper {

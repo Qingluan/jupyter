@@ -71,6 +71,9 @@ func (article *Article) WaitToFile() {
 	if article == nil {
 		return
 	}
+	if article.Text == "" {
+		return
+	}
 	// bufstr := ""
 	// for article := range with.Articles {
 	buf, err := json.Marshal(article)
@@ -148,7 +151,7 @@ func (with *WithOper) EndCache() *WithOper {
 	return with
 }
 
-func FindMostMayDate(raw string) (t time.Time) {
+func FindMostMayDate(title, raw string) (t time.Time) {
 	// var err error
 	ts := []time.Time{}
 	for match, temp := range DateMatcher {
@@ -174,7 +177,8 @@ func FindMostMayDate(raw string) (t time.Time) {
 		}
 		return min
 	} else {
-		log.Println("not found : use init")
+		// log.Println("not found : use init")
+		L(Red("Not found date for:", title))
 		// return nil
 		return time.Time{}
 	}
@@ -193,7 +197,6 @@ func NewArticle(doc *goquery.Document) (article *Article) {
 	doc.Find("a").Remove()
 	raw := doc.Text()
 	// fmt.Println(raw)
-	article.Date = FindMostMayDate(raw)
 	doc.Find("p").Each(func(i int, s *goquery.Selection) {
 		text1 += strings.TrimSpace(s.Text()) + "\n"
 	})
@@ -229,6 +232,12 @@ func NewArticle(doc *goquery.Document) (article *Article) {
 	} else {
 		article.Text = text1
 	}
+	if strings.TrimSpace(article.Text) == "" || len(strings.TrimSpace(article.Text)) < 30 {
+		article.Text = ""
+		return
+	}
+	article.Date = FindMostMayDate(article.Title+"|"+article.Link, raw)
+
 	return
 }
 

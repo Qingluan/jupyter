@@ -331,7 +331,7 @@ func (session *Session) Post(httpurl string, data map[string]string, proxy ...in
 	return
 }
 
-func (session *Session) Json(url string, data map[string]string, proxy ...interface{}) (resp *SmartResponse, err error) {
+func (session *Session) Json(url string, data map[string]interface{}, proxy ...interface{}) (resp *SmartResponse, err error) {
 	buf, _ := json.MarshalIndent(data, "", "\t")
 	req, err := httplib.NewRequest("POST", url, bytes.NewBuffer(buf))
 	req.Header.Set("Content-type", "application/json")

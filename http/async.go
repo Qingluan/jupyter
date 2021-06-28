@@ -212,7 +212,7 @@ func (async *Async) LoadCache(name string) *Async {
 		us := async.Done
 
 		name2 := filepath.Join(os.TempDir(), name)
-		Success("Done:", len(async.Done), name)
+		Success("Done:", len(async.Done), " ", name)
 		ioutil.WriteFile(name2, []byte(strings.Join(us, "\n")+"\n"), os.ModePerm)
 	}
 	return async
